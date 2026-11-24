@@ -213,6 +213,7 @@ type StreamOptions = {
   clientTools?: unknown;
   model?: string | null;
   connectionId?: string | null;
+  sessionKey?: string | null; // owner session of the Claude thinking store's opt-in caps
   apiKeyInfo?: unknown;
   body?: unknown;
   onComplete?: ((payload: StreamCompletePayload) => void) | null;
@@ -832,6 +833,7 @@ export function createSSEStream(options: StreamOptions = {}) {
     requestToolIdentityMap = null,
     streamBufferBytes = DEFAULT_STREAM_BUFFER_BYTES,
     pendingRequestId = null,
+    sessionKey = null,
   } = options;
   let buyerCostMicro: number | null = null;
   const onComplete = withBuyerCostMicro(completionCallback, () => buyerCostMicro);
@@ -943,7 +945,12 @@ export function createSSEStream(options: StreamOptions = {}) {
   const state: TranslateState | null =
     mode === STREAM_MODE.TRANSLATE
       ? {
-          ...(initTranslateStreamState(sourceFormat, connectionId, model) as TranslateState),
+          ...(initTranslateStreamState(
+            sourceFormat,
+            connectionId,
+            model,
+            sessionKey
+          ) as TranslateState),
           provider,
           toolNameMap,
           copilotCompatibleReasoning,
@@ -3904,7 +3911,8 @@ export function createSSETransformStreamWithLogger(
   requestToolIdentityMap: Map<string, { namespace: string; name: string }> | null = null,
   clientTools: unknown = null,
   streamBufferBytes: number = DEFAULT_STREAM_BUFFER_BYTES,
-  pendingRequestId: StreamPendingRequestIdentity | null = null
+  pendingRequestId: StreamPendingRequestIdentity | null = null,
+  sessionKey: string | null = null
 ) {
   return createSSEStream({
     mode: STREAM_MODE.TRANSLATE,
@@ -3927,6 +3935,7 @@ export function createSSETransformStreamWithLogger(
     streamBufferBytes,
     clientTools,
     pendingRequestId,
+    sessionKey,
   });
 }
 
