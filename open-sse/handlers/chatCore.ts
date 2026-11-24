@@ -144,6 +144,7 @@ import {
   supportsMaxTokens,
   getResolvedModelCapabilities,
   getExplicitModelOutputCap,
+  getModelContextLimit,
   resolveInputTokenCapForGate,
 } from "@/lib/modelCapabilities.ts";
 import {
@@ -2042,6 +2043,7 @@ async function handleChatCoreInner({
           model: effectiveModel,
           comboTargetLimits,
           comboContextLength,
+          targetContextWindow: getModelContextLimit({ provider, model: effectiveModel }),
         });
         contextLimit = resolved.limit;
         log?.info?.(
