@@ -13,6 +13,10 @@ export interface NodeSqliteDatabaseLike {
   };
   exec(sql: string): void;
   close(): void;
+  /** Driver transaction state; node:sqlite throws when read after close. */
+  isTransaction: boolean;
+  /** Whether the driver handle is still open; guards the read above. */
+  isOpen: boolean;
 }
 
 const MAX_STMT_CACHE_SIZE = 200;
@@ -162,16 +166,27 @@ export function createNodeSqliteAdapterFromDatabase(
       }
       stmtCache.clear();
     } catch {}
+    let failure = false;
     try {
       db.close();
-    } catch {}
-    _isOpen = false;
+    } catch {
+      // The driver refused to close. Do not report a state we did not observe:
+      // the flag below follows the driver when it exposes one.
+      failure = true;
+    }
+    _isOpen = typeof db.isOpen === "boolean" ? db.isOpen : !failure;
   }
 
   return {
     driver: "node:sqlite",
     get open() {
       return _isOpen;
+    },
+    get inTransaction() {
+      // Reading the driver's transaction state after close() throws
+      // ERR_INVALID_STATE, where better-sqlite3 returns false, so the open
+      // flag guards it.
+      return db.isOpen ? db.isTransaction : false;
     },
     get name() {
       return filePath;
