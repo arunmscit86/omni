@@ -261,7 +261,7 @@ docker build --target runner-web  -t omniroute:web  .
 | `OMNIROUTE_BUILD_MEMORY_MB` | `6144` | 產生的`next build`的 V8 堆上限 (`--max-old-space-size`)。               |
 | `OMNIROUTE_BUILD_WORKERS`   | `2`    | 飼料`CIRCLE_NODE_TOTAL`;接下來導出`workers = N - 1`用於頁面資料收集。   |
 
-`OMNIROUTE_BUILD_WORKERS`是向大型構建器籌集資金的人，也是在受限構建死亡時懷疑的人**後**`✓ Compiled successfully`.每個頁面資料工作者都是它自己的進程，父`next build`本身也是如此；實時VPS複製（問題#7518）在~ 4.5 GB處測量每個進程的峰值RSS與`NODE_OPTIONS`堆標誌無關（Turbopack在 V8 堆外的native/Rust記憶體中編譯）。 `2`的預設值（→ 1 個工作線程，總共 2 個進程）的大小適合發佈管道使用的 16 個GB / 4 vCPU GitHub 託管的運行程序。在`8` （→ 7 工作人員），運行程式記憶體不足，buildkit 失敗了`ResourceExhausted: ... cannot allocate memory`的步驟；一旦直接測量而不是推斷每個進程的RSS `3` （→ 2工人）仍然不適合。 `tests/unit/docker-build-memory-budget.test.ts`根據測量的數字進行算術，如果任一旋鈕超出了轉輪，則算術失敗。
+`OMNIROUTE_BUILD_WORKERS`是向大型建造者籌集資金的人，也是在受限構建死亡時懷疑的人**後**`✓ Compiled successfully`.每個頁面資料工作者都是它自己的進程，父`next build`本身也是如此；實時VPS複製（問題#7518）在~ 4.5 GB處測量每個進程的峰值RSS與`NODE_OPTIONS`堆標誌無關（Turbopack在 V8 堆外的native/Rust記憶體中編譯）。 `2`的預設值（→ 1 個工作線程，總共 2 個進程）的大小適合發佈管道使用的 16 個GB / 4 vCPU GitHub 託管的運行程序。在`8` （→ 7 工作人員），運行程式記憶體不足，buildkit 失敗了`ResourceExhausted: ... cannot allocate memory`的步驟；一旦直接測量而不是推斷每個進程的RSS `3` （→ 2工人）仍然不適合。 `tests/unit/docker-build-memory-budget.test.ts`根據測量的數字進行算術，如果任一旋鈕超出了轉輪，則算術失敗。
 
 Turbopack在本機 Rust 記憶體中進行編譯**外部**V8堆，所以`OMNIROUTE_BUILD_MEMORY_MB`不綁定它。在具有記憶體上限的主機上，建構由OOM殺手進行SIGKILLed ，根本沒有錯誤文字—它只是停止在`Creating an optimized production build`中，讀起來像是掛起而不是記憶體不足。這就是為什麼`Dockerfile`預設為 webpack (`OMNIROUTE_USE_TURBOPACK=0`)，與`npm run dev` / `npm run build`不同，其中Turbopack是代碼預設值：沒有建構參數的裸`docker build .` （Railway 和其他一鍵式主機運行的內容）不得在記憶體上限的建構器上悄無聲息地死亡。發布的圖像已在`docker-publish.yml`中明確通過`OMNIROUTE_USE_TURBOPACK=0` 。在具有大量RAM的建構器上，選擇Turbopack以獲得更快的建置：
 
@@ -294,7 +294,7 @@ Docker中的記憶體行為：
 
 ### 編碼代理的運行時RAM
 
-1 GiB Docker預設是dashboard/light-chat底板，而不是生產尺寸。長`POST /v1/responses`主體（數百個訊息、數十種工具）在壓縮期間保留多個記憶體中圖。兩個重疊的~ 3 MiB / ~ 750k 令牌請求已中止 V8** 12 GiB** old-space (`FATAL ERROR: Reached heap limit`) 也擊中了 16 GiB cgroup OOM。參見[#7849](https://github.com/diegosouzapw/OmniRoute/issues/7849) 。
+1 GiB Docker預設是dashboard/light-chat底板，而不是生產尺寸。長`POST /v1/responses`主體（數百個訊息、數十種工具）在壓縮期間保留多個記憶體中圖。兩個重疊的~ 3 MiB / ~ 750k 令牌請求已中止 V8** 12 GiB** old-space (`FATAL ERROR: Reached heap limit`) 也擊中了 16 GiB cgroup OOM。參見[#7849](https://github.com/cheaper-inference/OmniRoute/issues/7849) 。
 
 尺寸**堆上方的 cgroup `--memory`** —本機緩衝區、 SQLite和壓縮中間體位於 V8 之外。
 
@@ -581,11 +581,11 @@ sudo systemctl enable --now omniroute-update.path
 
 庫存Docker / Kubernetes OmniRoute是**一個 Node 程序+一個SQLite writer** 。高可用性是**不支援**在該拓撲上。
 
-| 約束                               | 結果                                                                                                                                                                                                               |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 單身作家                           | 做**不是**針對同一個SQLite檔案運行多個副本。這會損壞DB。                                                                                                                                                           |
-| 重新創建/重新啟動/ HEALTHCHECK殺死 | **全面停電**進行中的SSE、儀表板會話和記憶體狀態。每個連線的客戶端都會斷線。空端點視窗期間的新請求獲得反向代理**`502 Bad Gateway: Unknown error`** ，而不是OmniRoute JSON — 客戶端無法區分這與提供者失敗 (#11015)。 |
-| 與`/healthz`相同的事件循環         | 繁忙的目錄或壓縮標記可能會延遲探測；短暫逾時然後重新啟動**僅有的**複製品。                                                                                                                                         |
+| 約束                               | 結果                                                                                                                                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 單身作家                           | 做**不是**針對同一個SQLite檔案運行多個副本。這會損壞DB。                                                                                                                                                               |
+| 重新創建/重新啟動/ HEALTHCHECK殺死 | **全面停電**進行中的SSE、儀表板會話和記憶體狀態。每個連線的客戶端都會斷線。空端點視窗期間的新請求獲得反向代理**`502 Bad Gateway: Unknown error`** ，而不是OmniRoute JSON —客戶端無法將此與提供者故障 (#11015) 區分開。 |
+| 與`/healthz`相同的事件循環         | 繁忙的目錄或壓縮標記可能會延遲探測；短暫逾時然後重新啟動**僅有的**複製品。                                                                                                                                             |
 
 **探針矩陣**（另請參閱[Kubernetes 探針建議](../ops/MONITORING_GUIDE.md#kubernetes-probe-recommendations)）：
 
@@ -595,9 +595,9 @@ sudo systemctl enable --now omniroute-update.path
 | 準備狀態  | HTTP `GET /healthz`                                | 嚴格的超時將事件循環繁忙視為已死 |
 | 深淵/人類 | `/api/monitoring/health`                           | 自動化 kubelet 活躍度            |
 
-**升級：**預計每個會話都會下降。如果可以的話，流失客戶；預設SQLite沒有滾動更新。 Compose `restart: unless-stopped`加Docker `HEALTHCHECK`也將取代容器不健康時唯一的進程－相同的爆炸半徑。
+**升級：**預計每個會話都會下降。如果可以的話，流失客戶；預設SQLite沒有滾動更新。 compose `restart: unless-stopped`加Docker `HEALTHCHECK`也會取代容器不健康時的唯一進程—相同的爆炸半徑。
 
-`deploy/kubernetes/`和`deploy/helm/omniroute/`中存在現成的清單和 Helm 圖表 — 請參閱[Kubernetes 部署指南](../ops/KUBERNETES_DEPLOYMENT_GUIDE.md)。
+`deploy/kubernetes/`和`deploy/helm/omniroute/` —中的現成清單和 Helm 圖表請參閱[Kubernetes 部署指南](../ops/KUBERNETES_DEPLOYMENT_GUIDE.md)。
 
 Kubernetes 片段**單一副本**（需要重新建立；不要針對一個SQLite檔案引發`replicas` ）：
 
@@ -626,9 +626,9 @@ spec:
             periodSeconds: 20
 ```
 
-`preStop` sleep 讓 kube 在SIGTERM之前刪除服務端點，所以**新的**交通停止撞擊垂死的進程。飛行中的`/v1/responses` SSE透過重量級准入租約耗盡至`SHUTDOWN_TIMEOUT_MS` （預設 30 秒）（#11015）。仍然到達進程的新請求會得到`503` + `Retry-After: 5`。在更換就緒之前重新建立空端點間隙仍然是硬中斷 - 這是SQLite拓撲，而不是探針配置錯誤。
+`preStop` sleep 讓 kube 在SIGTERM之前刪除服務端點，所以**新的**交通停止撞擊垂死的進程。飛行中的`/v1/responses` SSE透過重量級准入租約 (#11015) 耗盡至`SHUTDOWN_TIMEOUT_MS` （預設 30 秒）。仍然到達進程的新請求會得到`503` + `Retry-After: 5`。在更換就緒之前重新建立空端點間隙仍然是硬中斷— ，即SQLite拓撲，而不是探針配置錯誤。
 
-外部Postgres / 多重寫入者HA是**不是**記錄的庫存路徑。如果您需要HA，請保留單一副本或執行專案已單獨測試和記錄的拓撲。 Postgres/MySQL作品位於[#8075](https://github.com/diegosouzapw/OmniRoute/issues/8075) 。在那之前，唯一受支持的繁殖方式**大的**`/v1/responses`容量是 N 個獨立進程（下一節），而不是一個磁碟區上的`replicas > 1` 。
+外部Postgres / 多重寫入者HA是**不是**記錄的庫存路徑。如果您需要HA，請保留單一副本或執行專案已單獨測試和記錄的拓撲。 Postgres/MySQL工作位於[#8075](https://github.com/cheaper-inference/OmniRoute/issues/8075)中。在那之前，唯一受支持的繁殖方式**大的**`/v1/responses`容量是N個獨立進程（下一節），而不是一個磁碟區上的`replicas > 1` 。
 
 ## 橫向擴展：N個獨立進程
 
@@ -638,25 +638,25 @@ spec:
 
 當需要刷新時，被動實例會重新讀取連接，並僅採用不同的、未過期的存取權杖。否則，刷新將被停用，而不會過期或停用連接或計算刷新中斷器故障。真正的上游身份驗證失敗仍然使用正常的失敗計數、指數冷卻和正常的客戶端錯誤；帳戶停用仍然是永久性的。在存取令牌過期之前同步擁有者的輪換令牌（預設主動刷新提前時間為五分鐘），或重新匯入Codex身份驗證檔案。被動導入儲存提供的令牌，而不在令牌端點驗證它們。手動dashboard/API刷新返回`409 refresh_disabled`；新的OAuth登入沒有變更。請參閱[環境參考](../reference/ENVIRONMENT.md#passive-codex-token-refresh)。
 
-一個節點進程是**一堆V8** 。兩個重疊的~ 3 MiB / ~ 750k 令牌編碼代理`POST /v1/responses` (RTK + Caveman) 在~ 12 Gi (`FATAL ERROR: Reached heap limit`) 處中止該堆，並且可以OOM一個 16 Gi cgroup。參見[#7849](https://github.com/diegosouzapw/OmniRoute/issues/7849) 。該測量是**記憶體預算**警告，不是兩個並發長`/v1/responses`的乘積硬最大值。重量級聊天准入由自動產生的攝取位元組預算（`OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES`、 `src/shared/middleware/admissionBudget.ts`）控制，該預算大小來自相同的V8/cgroup上限—在已經調整大小的進程上向上覆蓋它（或設定舊的`OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT`請求計數上限），從而重新引入中止。小型聊天， `/healthz`、 `/v1/models`和MCP是**不是**在那頂帽子裡。
+一個節點進程是**一堆V8** 。兩個重疊的~ 3 MiB / ~ 750k 令牌編碼代理`POST /v1/responses` (RTK + Caveman) 在~ 12 Gi (`FATAL ERROR: Reached heap limit`) 處中止該堆，並且可以OOM一個 16 Gi cgroup。參見[#7849](https://github.com/cheaper-inference/OmniRoute/issues/7849) 。該測量是**記憶體預算**警告，不是兩個並發長`/v1/responses`的乘積硬最大值。重量級聊天准入由自動匯出的攝取位元組預算（`OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES`、 `src/shared/middleware/admissionBudget.ts`）控制，該預算的大小來自相同的V8/cgroup上限—在已經調整大小的進程上向上覆蓋它（或設定舊的`OMNIROUTE_CHAT_MAX_HEAVY_IN_FLIGHT`請求計數上限）會重新引入中止。小型聊天， `/healthz`、 `/v1/models`和MCP是**不是**在那頂帽子裡。
 
 ### 1.單一進程：兩個以上的長`/v1/responses`
 
-一個**健康**進程（堆低於`OMNIROUTE_CHAT_ADMISSION_HEAP_SHED_RATIO`，預設`0.75`）**可能**當進程範圍的飛行位元組預算 (`OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES` / #10110) 仍有空間時，運行兩個以上的並發長`POST /v1/responses` 。 `OMNIROUTE_CHAT_LARGE_BODY_BYTES`或以上的主體（預設 256 KiB）採用與結構重請求相同的重量級租約，並使用相同的[#10437](https://github.com/diegosouzapw/OmniRoute/pull/10437) `tryAcquireHealthyHeadroom`轉義（`OMNIROUTE_CHAT_ADMISSION_HEALTHY_HEADROOM`）。數十個同時長SSE客戶端（營運商通常需要 40-50 個）**記憶體預算**問題—大小堆+ primary/headroom插槽+ `OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES` —不是嚴格的「最大 2」乘積限制。受壓堆仍然會因可重試的`503`而脫落，因此 #7849 不會返回。
+一個**健康**進程（堆低於`OMNIROUTE_CHAT_ADMISSION_HEAP_SHED_RATIO`，預設`0.75`）**可能**當進程範圍內的飛行位元組預算 (`OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES` / #10110) 仍有空間時，運行兩個以上的並發長`POST /v1/responses` 。 `OMNIROUTE_CHAT_LARGE_BODY_BYTES` （預設 256 KiB）或以上的主體採用與結構重請求相同的重量級租約，並使用相同的[#10437](https://github.com/cheaper-inference/OmniRoute/pull/10437) `tryAcquireHealthyHeadroom`轉義（`OMNIROUTE_CHAT_ADMISSION_HEALTHY_HEADROOM`）。數十個並發長SSE客戶端（運營商通常需要40-50個）是一個**記憶體預算**問題—大小堆+ primary/headroom插槽+ `OMNIROUTE_CHAT_MAX_INFLIGHT_BYTES` —不是硬性「最大 2」乘積限制。受壓堆仍然會因可重試的`503`而脫落，因此#7849不會返回。
 
 到**乘法堆疊**（獨立V8老空間）**今天**:
 
-| 做                                                                                            | 不要                                     |
-| --------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| 跑步**containers/pods** ，每個都有其**自己的**`DATA_DIR` / 體積                               | 針對一個SQLite檔設定`replicas > 1`       |
-| 從堆/飛行位元組預算中調整飛行中+健康淨空的大小；1–2 是保守的 #7849 預設值，而不是硬產品最大值 | 給一個行程8個× RAM和一個無限制的計數上限 |
-| 可選： `QUOTA_STORE_DRIVER=redis` + `QUOTA_STORE_REDIS_URL`用於**共享配額計數器**             | 將Redis視為共享SQLite —它不是            |
-| 將提供者機密複製到每個實例（或接受分區儀表板）                                                | 預計跨實例有一個儀表板/一個呼叫日誌      |
-| 前端帶有任何負載平衡器；透過API密鑰或會話黏性就足夠了                                         | 需要特定於提供者的尺寸感知中間件         |
+| 做                                                                                          | 不要                                     |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 跑步**containers/pods** ，每個都有其**自己的**`DATA_DIR` / 體積                             | 針對一個SQLite檔設定`replicas > 1`       |
+| 從堆/飛行位元組預算中調整飛行中+健康淨空的大小；1–2 是保守的#7849預設值，而不是硬乘積最大值 | 給一個行程8個× RAM和一個無限制的計數上限 |
+| 可選： `QUOTA_STORE_DRIVER=redis` + `QUOTA_STORE_REDIS_URL`用於**共享配額計數器**           | 將Redis視為共享SQLite —它不是            |
+| 將提供者機密複製到每個實例（或接受分區儀表板）                                              | 預計跨實例有一個儀表板/一個呼叫日誌      |
+| 前端帶有任何負載平衡器；透過API鑰或會話黏性就足夠了                                         | 需要特定於提供者的尺寸感知中間件         |
 
-會話到帳戶的關聯性也可以透過Redis共享：在每個進程上設定`OMNIROUTE_SESSION_AFFINITY_STORE=redis`和`REDIS_URL` ，具有相同的`REDIS_KEY_PREFIX`和正的`sessionAffinityTtlMs`設定。引腳將雜湊使用帳戶身份解析為每個進程的合格本地連接，因此具有匹配身份元資料的OAuth帳戶不需要具有匹配的連接IDs。在 pin 解析和保護驅逐方面，已知帳戶身分優先於相互矛盾的本地IDs ；沒有身分的記錄（或沒有身分的驅逐呼叫者）保留傳統的ID守衛。沒有穩定使用身分的帳戶仍然需要匹配IDs。 Redis錯誤或超過 100 毫秒的呼叫會回退到本地SQLite。每個Redis關聯儲存將未完成的操作限制為 8 個，在滿時立即繞過Redis ，並且僅在底層工作解決時而不是在呼叫者截止日期時釋放插槽。在Redis中斷期間，不存在共享事實：每個實例都會回退到其自己的本地親和性，每個實例的會話可能會重新固定一次，並且實例可能會出現分歧。當黏性恢復時，透過Redis重新收斂。超時限制等待，而不是發送EVAL，可能會在回退後落地。路由寫入比較路由決策觀察到的確切值，而不是新的突變時讀取；觀察到的未命中或SQLite回退觀察將與缺失的Redis鍵進行比較。過時的引腳會在一個CAS中被替換，因此較晚的命令無法替換或刪除較新的不同引腳。 Redis讀取以原子方式傳回值和剩餘伺服器TTL；正PTTL （或無過期）決定活性，而不是作者的JSON時間戳或讀者的時鐘。本地快照將剩餘的TTL映射到本地截止日期；現有的JSON鍵仍然可讀，並且為CAS保留其原始位元組。 Redis是唯一的真相來源，同時它的答案。已確認的共用更新插入、觸控和刪除會刪除本機條目，而不會安裝或刷新它。 Redis路徑上的SQLite僅保存此實例自己的來自Redis錯誤、逾時或准入飽和的後備決策，與以前一樣受 TTL 限制。稍後中斷時遺失的本機 pin 會導致一次新選擇（一次提示快取未命中），而不是錯誤或被逐出的帳戶。被拒絕的更新插入以原子方式返回共享獲勝者及其剩餘的TTL ：普通選擇重新檢查映射的本地截止日期並使用仍然有效的合格獲勝者，觸摸該帳戶的使用情況並記錄，而無需其他共享寫入。如果不可用，選擇將保留本機候選，保持共用引腳不變並發出偵錯訊息。拒絕CAS不寫SQLite； Redis錯誤、逾時或准入飽和將應用現有的本地操作。如果發送的突變的回應在逾時後到達（接受、拒絕或錯誤），則同步精確序列化值比較和刪除僅刪除位元組相同的逾時後備行。比較和刪除之間沒有等待；保留較新的中斷寫入。即使Redis關閉，受保護的驅逐也會刪除失敗帳戶自己的本地 pin，並在確認共享驅逐後再次清除它。待處理的早期共享回應無法恢復已逐出的本地 pin，因為共享成功永遠不會寫入SQLite。稍後的中斷回退可以重新固定帳戶；後來接受的共享寫入僅存在於Redis中。 Redis未命中不諮詢本地後備狀態。當驅動器關閉時，新選擇的引腳保留傳統的四場SQLite JSON形狀；只有Redis路由添加散列帳戶身份。預取的引腳在其到期邊界時重新檢查。 Redis非租賃選擇重新讀取存儲，但同步租賃規劃仍然可以使用在預取和規劃之間逐出的引腳（可接受的盡力而為視窗）。租約提交無法在持久聲明後切換帳戶：在拒絕更新插入時，它僅保留該請求的已聲明候選者，而使共享獲勝者保持不變，因此跨實例的協議受到該路徑的限制。表的其餘部分仍然適用：這不共享組合會話黏性、本機Codex轉引腳、帳戶信號量、鎖定、支出限制、配置或呼叫日誌。
+會話到帳戶的關聯性也可以透過Redis共享：在每個進程上設定`OMNIROUTE_SESSION_AFFINITY_STORE=redis`和`REDIS_URL` ，具有相同的`REDIS_KEY_PREFIX`和正的`sessionAffinityTtlMs`設定。引腳將雜湊使用帳戶身份解析為每個進程的合格本地連接，因此具有匹配身份元資料的OAuth帳戶不需要具有匹配的連接IDs。在 pin 解析和保護驅逐方面，已知帳戶身分優先於相互矛盾的本地IDs ；沒有身分的記錄（或沒有身分的驅逐呼叫者）保留傳統的ID守衛。沒有穩定使用身分的帳戶仍然需要匹配IDs。 Redis錯誤或超過 100 毫秒的呼叫會回退到本地SQLite。每個Redis關聯儲存將未完成的操作限制為 8 個，在滿時立即繞過Redis ，並且僅在底層工作解決時而不是在呼叫者截止日期時釋放插槽。在Redis中斷期間，不存在共享事實：每個實例都會回退到其自己的本地親和性，每個實例的會話可能會重新固定一次，並且實例可能會出現分歧。當黏性恢復時，透過Redis重新收斂。超時限制等待，而不是發送EVAL，可能會在回退後落地。路由寫入比較路由決策觀察到的確切值，而不是新的突變時讀取；觀察到的未命中或SQLite回退觀察將與缺失的Redis鍵進行比較。過時的引腳在一個CAS中被替換，因此較晚的命令無法替換或刪除較新的不同引腳。 Redis讀取以原子方式傳回值和剩餘伺服器TTL；正PTTL （或無過期）決定活性，而不是作者的JSON時間戳或讀者的時鐘。本地快照將剩餘的TTL映射到本地截止日期；現有的JSON鍵仍然可讀，並且為CAS保留其原始位元組。 Redis是唯一的真相來源，同時它的答案。已確認的共用更新插入、觸控和刪除會刪除本機條目，而不會安裝或刷新它。 Redis路徑上的SQLite僅保存此實例自己的來自Redis錯誤、逾時或准入飽和的後備決策，與以前一樣受 TTL 限制。稍後中斷時遺失的本機 pin 會導致一次新選擇（一次提示快取未命中），而不是錯誤或被逐出的帳戶。被拒絕的更新插入以原子方式返回共享獲勝者及其剩餘的TTL ：普通選擇重新檢查映射的本地截止日期並使用仍然有效的合格獲勝者，觸摸該帳戶的使用情況並記錄，而無需其他共享寫入。如果不可用，選擇將保留本機候選，保持共用引腳不變並發出偵錯訊息。拒絕CAS不寫SQLite； Redis錯誤、逾時或准入飽和將應用現有的本地操作。如果發送的突變的回應在逾時後到達（接受、拒絕或錯誤），則同步精確序列化值比較和刪除僅刪除位元組相同的逾時後備行。比較和刪除之間沒有等待；保留較新的中斷寫入。即使Redis關閉，受保護的驅逐也會刪除失敗帳戶自己的本地 pin，並在確認共享驅逐後再次清除它。待處理的早期共享回應無法恢復已逐出的本地 pin，因為共享成功永遠不會寫入SQLite。稍後的中斷回退可以重新固定帳戶；後來接受的共享寫入僅存在於Redis中。 Redis未命中不諮詢本地後備狀態。當驅動器關閉時，新選擇的引腳保留傳統的四場SQLite JSON形狀；只有Redis路由添加散列帳戶身份。預取的引腳在其到期邊界時重新檢查。 Redis非租賃選擇重新讀取存儲，但同步租賃規劃仍然可以使用在預取和規劃之間逐出的引腳（可接受的盡力而為視窗）。租約提交無法在持久聲明後切換帳戶：在拒絕更新插入時，它僅保留該請求的已聲明候選者，而使共享獲勝者保持不變，因此跨實例的協議受到該路徑的限制。表的其餘部分仍然適用：這不共享組合會話黏性、本機Codex轉引腳、帳戶信號量、鎖定、支出限制、配置或呼叫日誌。
 
-硬體：每個實例並發長`/v1/responses`是**記憶體預算**問題（堆+飛行位元組/#10110）。 `N`獨立的`DATA_DIR`仍然會乘以堆：主機RAM必須覆蓋`N × cgroup`，而不是「一個 16 Gi pod 和 N = 8」。切勿在一個SQLite檔案上`replicas > 1` 。
+硬體：每個實例並發長`/v1/responses`是**記憶體預算**問題（堆+ inflight-byte / #10110）。 `N`獨立`DATA_DIR`仍然會乘以堆：主機RAM必須覆蓋`N × cgroup`，而不是「一個 16 Gi pod，其中 N = 8」。切勿在一個SQLite檔案上`replicas > 1` 。
 
 寫草圖（兩個堆，兩個卷—不是`deploy.replicas: 2`）：
 
@@ -685,15 +685,15 @@ volumes:
   omniroute-b-data:
 ```
 
-進程內密度（ HTTP隔離壓縮）為[#11023](https://github.com/diegosouzapw/OmniRoute/issues/11023) 。共享持久狀態上的一個邏輯集群是[#8075](https://github.com/diegosouzapw/OmniRoute/issues/8075) 。
+進程內密度（ HTTP隔離壓縮）為[#11023](https://github.com/cheaper-inference/OmniRoute/issues/11023) 。 [#8075](https://github.com/cheaper-inference/OmniRoute/issues/8075)是共享持久狀態上的一個邏輯集群。
 
-## Docker內的 Gemini 區域錯誤
+## Docker內的Gemini區域錯誤
 
-Google AI Studio / Gemini API可以用FAILED_PRECONDITION和`User location is not supported for the API use.`回傳HTTP 400 主機上的成功請求並不能證明容器使用相同的出站路由。 DNS排序、 IPv4/IPv6連線、 VPN路由和設定的代理程式可能有所不同。查看[Google支援的地區](https://ai.google.dev/gemini-api/docs/available-regions)以及實際連接路由；僅此錯誤並不能辨識出錯誤的API金鑰。
+Google AI Studio / Gemini API可以使用FAILED_PRECONDITION和`User location is not supported for the API use.`回傳HTTP 400 主機上的成功請求並不能證明容器使用相同的出站路由。 DNS排序、 IPv4/IPv6連線、 VPN路由和配置的代理程式可能有所不同。查看[Google支援的區域](https://ai.google.dev/gemini-api/docs/available-regions)以及實際連接路由；僅此錯誤並不能辨識出錯誤的API密鑰。
 
-### 首選特定於連接的代理
+### 首選連接特定的代理
 
-對受影響的 Gemini 連線使用OmniRoute的[每連線代理配置](../ops/PROXY_GUIDE.md#4-level-proxy-system)，然後重複**測試連接**以及同型號的小要求。這會使路由變更的範圍保持在該連線範圍內。驗證代理是否可以從容器訪問，並且連接確實選擇了它。更改路線並不能保證上游區域的資格。
+對受影響的Gemini連線使用OmniRoute的[每連線代理配置](../ops/PROXY_GUIDE.md#4-level-proxy-system)，然後重複**測試連接**以及同型號的小要求。這會使路由變更的範圍保持在該連線範圍內。驗證代理是否可以從容器訪問，並且連接確實選擇了它。更改路線並不能保證上游區域的資格。
 
 ### 比較主機和容器網絡
 
@@ -704,11 +704,11 @@ node -e 'require("node:dns").lookup("generativelanguage.googleapis.com", {all: t
 docker compose exec omniroute node -e 'require("node:dns").lookup("generativelanguage.googleapis.com", {all: true}, (error, addresses) => { if (error) { console.error(error.code); process.exitCode = 1; return; } console.log(addresses.map(({family}) => family)); })'
 ```
 
-將`omniroute`替換為您正在執行的服務（例如`omniroute-web`）。這些指令會列印沒有憑證或IP位址的位址族。傳回的`6`僅顯示IPv6 DNS結果：它確實**不是**證明可用的IPv6路由或API存取。在安裝了`curl`情況下，比較兩個環境中的`curl -4 -I https://generativelanguage.googleapis.com`和`curl -6 -I https://generativelanguage.googleapis.com` 。 HTTP回應證明該探測的連接性，即使它是未經身份驗證的錯誤；只有經過身份驗證的模型請求才能測試 Gemini 的資格。
+將`omniroute`替換為您正在執行的服務（例如`omniroute-web`）。這些指令會列印沒有憑證或IP位址的位址族。傳回的`6`僅顯示IPv6 DNS結果：它確實**不是**證明可用的IPv6路由或API存取。在安裝了`curl`情況下，比較兩個環境中的`curl -4 -I https://generativelanguage.googleapis.com`和`curl -6 -I https://generativelanguage.googleapis.com` 。 HTTP回應證明該探測的連接性，即使它是未經身份驗證的錯誤；只有經過身份驗證的模型請求才能測試Gemini資格。
 
 ### 主機級替代方案：工作IPv6和解析器策略
 
-[#12762](https://github.com/diegosouzapw/OmniRoute/issues/12762)的記者透過啟用容器IPv6並更改 glibc 位址選擇來恢復其環境中的存取。將其視為特定於環境的替代方案。在調整解析器首選項之前確認工作主機IPv6、容器egress/routing和防火牆規則。私有ULA位址本身不會建立公用IPv6連線。
+[#12762](https://github.com/cheaper-inference/OmniRoute/issues/12762)的記者透過啟用容器IPv6並更改 glibc 位址選擇來恢復其環境中的存取。將其視為特定於環境的替代方案。在調整解析器首選項之前確認工作主機IPv6、容器egress/routing和防火牆規則。私有ULA位址本身不會建立公用IPv6連線。
 
 對於已附加到 Compose 預設網路的服務，此片段會在該網路上啟用IPv6 ；保留其餘的服務、連接埠、磁碟區和設定：
 
@@ -720,11 +720,11 @@ networks:
 
 對於命名網絡，在服務實際加入的網路上啟用它。 Docker可以分配ULA網路；只有當您的網路需要時才選擇明確的、不重疊的子網路。請參閱[Docker IPv6網路](https://docs.docker.com/engine/daemon/ipv6/)和[Compose 網路選項](https://docs.docker.com/reference/compose-file/networks/#enable_ipv6)。
 
-上一個**基於 glibc 的圖像**, `/etc/gai.conf` can change address selection. The current repository Dockerfile uses Debian; custom musl-based images do not share this mechanism. The reported adjustment changes the ULA label from `label fc00::/7 6` to `label fc00::/7 1`. Start from the image's complete policy table and preserve its other entries: adding a `label` or `precedence` entry replaces that default table, so a file containing only the changed line is insufficient. The [glibc configuration reference](https://github.com/bminor/glibc/blob/master/posix/gai.conf) documents those semantics. Bind-mount the reviewed file read-only at `/etc/gai.conf` and recreate the service to apply it.
+上一個**基於 glibc 的圖像**， `/etc/gai.conf`可以改變位址選擇。目前儲存庫 Dockerfile 使用 Debian；基於 musl 的自訂映像不共用此機制。報告的調整將ULA標籤從`label fc00::/7 6`改為`label fc00::/7 1`。從映像的完整策略表開始並保留其其他項目：新增`label`或`precedence`條目會取代預設表，因此僅包含更改行的檔案是不夠的。 [glibc 設定參考](https://github.com/bminor/glibc/blob/master/posix/gai.conf)記錄了這些語意。在`/etc/gai.conf`上以唯讀方式綁定掛載已審查的文件，並重新建立服務以應用它。
 
-This changes OS address selection for**該容器中的所有出站流量**。它并不强制每个应用程序选择IPv6：节点的DNS顺序和连接选择也很重要。特别是， `--dns-result-order=ipv4first`更喜欢IPv4 ，并且不是IPv4-only失败的补救措施。请参阅[节点DNS排序](https://nodejs.org/api/dns.html#dnssetdefaultresultorderorder)。
+這會更改OS地址選擇**該容器中的所有出站流量**。它並沒有強制每個應用程式選擇IPv6：節點的DNS順序和連接選擇也很重要。特別是， `--dns-result-order=ipv4first`更喜歡IPv4 ，並且不是IPv4-only失敗的補救措施。請參閱[節點DNS排序](https://nodejs.org/api/dns.html#dnssetdefaultresultorderorder)。
 
-在任何主機層級更改後重新測試 Gemini 和您的其他提供者。若要回滾，請刪除自訂`gai.conf`掛載，恢復先前的網路設定並在維護時段內重新建立受影響的service/network 。重新建立網路可能會中斷連接到該網路的其他容器；不要刪除持久性資料卷。
+在任何主機層級更改後重新測試Gemini和您的其他提供者。若要回滾，請刪除自訂`gai.conf`掛載，恢復先前的網路設定並在維護時段內重新建立受影響的service/network 。重新建立網路可能會中斷連接到該網路的其他容器；不要刪除持久性資料卷。
 
 ## 重要注意事項
 
